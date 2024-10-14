@@ -60,6 +60,7 @@ def tokens_to_indices(tokens, vocab):
     return [vocab.get(token, vocab['<UNK>']) for token in tokens]
 
 data = pd.read_csv("data/data.csv")
+data = data[data['maxpoints'] != 0]
 data['percent'] = data['teachergradedpoints']/data['maxpoints']
 all_text = ' '.join(data['correctsolution'].tolist())
 tokens = sql_tokenizer(all_text)
@@ -69,14 +70,12 @@ vocab = {token: idx for idx, (token, _) in enumerate(token_counter.items(), star
 # Optionally, add special tokens like <PAD> and <UNK>
 vocab['<PAD>'] = 0
 vocab['<UNK>'] = len(vocab) + 1
+print(len(vocab))
 pk.dump(vocab, open("data/vocab.pkl", "wb"))
-
-
-
 data['correctsolution_indices'] = data['correctsolution'].apply(lambda sql: tokens_to_indices(sql_tokenizer(sql), vocab))
 data['studentsolution_indices'] = data['studentsolution'].apply(lambda sql: tokens_to_indices(sql_tokenizer(sql), vocab))
 max_length = data['studentsolution_indices'].apply(len).max()
 data['correctsolution_padded'] = data['correctsolution_indices'].apply(lambda seq: pad_sequence(seq, max_length))
 data['studentsolution_padded'] = data['studentsolution_indices'].apply(lambda seq: pad_sequence(seq, max_length))
 
-data[['studentsolution_padded', 'correctsolution_padded', 'percent', 'studentsolution', 'correctsolution']].to_csv("data/preprocessed_data.csv", index=False)
+data[['studentsolution_padded', 'correctsolution_padded', 'percent']].to_pickle("data/processed_data.pkl")
