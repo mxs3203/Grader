@@ -1,12 +1,15 @@
 import pickle
-import re
 
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
 import pandas as pd
 import torch
 from torch import nn
 from torch.utils.data import random_split
 import wandb
 from Dataset import QuestionDataset
+import umap
 from models.SimpleModel import SQLComparisonModel
 
 if torch.cuda.is_available():
@@ -30,7 +33,7 @@ else:
     Setting up the data
 '''
 data = pd.read_pickle("data/processed_data.pkl")
-dataset = QuestionDataset(data, column_names=['studentsolution_padded', 'correctsolution_padded', 'percent'],device=device)
+dataset = QuestionDataset(data, column_names=['studentsolution_padded', 'correctsolution_padded', 'percentWrong'],device=device)
 vocabulary = pickle.load(open("data/vocab.pkl", "rb"))
 vocab_size = len(vocabulary)+1
 print(vocab_size)
@@ -38,10 +41,10 @@ print(vocab_size)
     Hyperparams
 '''
 batch_size = 256
-learning_rate = 0.0001
+learning_rate = 0.001
 num_epochs = 100
-embedding_dim = 256
-hidden_dim = 256
+embedding_dim = 64
+hidden_dim = 64
 
 '''
     Spliting the data
@@ -62,10 +65,11 @@ torch.cuda.empty_cache()
 '''
     Training loop
 '''
-wandb.init(
+run = wandb.init(
     # set the wandb project where this run will be logged
     project="Grader",
-
+    entity="mxs3203",
+    name="SimpleEmbedding_Emb{}_Hid{}".format(embedding_dim, hidden_dim),
     # track hyperparameters and run metadata
     config={
         "batch_size": batch_size,
@@ -84,9 +88,9 @@ for ep in range(num_epochs):
     running_loss_valid = 0.0
 
     for i,batch_data in enumerate(sql_train_loader):
-        correct_sql, student_sql, percent = batch_data['correct_sql'], batch_data['student_sql'], batch_data['percent']
+        correct_sql, student_sql, percent = batch_data['correct_sql'], batch_data['student_sql'], batch_data['percentWrong']
         optim.zero_grad()
-        distance = model(correct_sql, student_sql)
+        distance,correct_L, student_L = model(correct_sql, student_sql)
         loss = loss_fn(distance, percent)
         loss.backward()
         optim.step()
@@ -95,13 +99,39 @@ for ep in range(num_epochs):
     with torch.no_grad():
         model.eval()
         for i,batch_data in enumerate(sql_test_loader):
-            correct_sql, student_sql, percent = batch_data['correct_sql'], batch_data['student_sql'], batch_data['percent']
-            distance = model(correct_sql, student_sql)
+            correct_sql, student_sql, percent = batch_data['correct_sql'], batch_data['student_sql'], batch_data['percentWrong']
+            distance,correct_L, student_L = model(correct_sql, student_sql)
             loss = loss_fn(distance, percent)
             running_loss_valid += loss.item()
+    if ep % 5 == 0: # every n th epoch
+        umap_reducer = umap.UMAP(n_components=2, random_state=27)
+        latent_representations = torch.cat((correct_L, student_L), dim=0).cpu().numpy()
+        latent_2d = umap_reducer.fit_transform(latent_representations)
+        mini_batch_size = np.shape(batch_data['correct_sql'])[0]
+        correct_2d = latent_2d[:mini_batch_size]
+        student_2d = latent_2d[mini_batch_size:]
+        df = pd.DataFrame({
+            'UMAP1': latent_2d[:, 0],  # First UMAP component
+            'UMAP2': latent_2d[:, 1],  # Second UMAP component
+            'label': ['correct'] * mini_batch_size + ['student'] * mini_batch_size,  # Label for correct/student
+            'distance': list(distance.detach().cpu().numpy()) + list(distance.detach().cpu().numpy()),  # Distance repeated for correct/student
+            'percentWrong': list(percent.detach().cpu().numpy()) + list(percent.detach().cpu().numpy())  # Percent repeated for correct/student
+        })
+        plt.figure(figsize=(10, 6))
+        sns.scatterplot(x=correct_2d[:, 0], y=correct_2d[:, 1], color='blue', label='Correct SQL', marker='o')
+        sns.scatterplot(x=student_2d[:, 0], y=student_2d[:, 1], color='red', label='Student SQL', marker='x')
+        plt.title("UMAP Visualization of Latent Representations")
+        # Draw lines connecting each pair of student and correct representations
+        for j in range(mini_batch_size):
+            correct_point = correct_2d[j]
+            student_point = student_2d[j]
+            plt.plot([correct_point[0], student_point[0]], [correct_point[1], student_point[1]], color='gray',
+                     linestyle='--')
+            mid_point = (correct_point + student_point) / 2  # Midpoint between correct and student points
+            plt.text(mid_point[0], mid_point[1], f'{percent[j]:.2f}', fontsize=9, color='black', ha='center')
+        plt.savefig("plots/UMAP_{}.png".format(ep))
 
     print(f"Epoch [{ep + 1}/{num_epochs}], Train Loss: {running_loss_train / len(sql_train_loader):.4f}, "
           f"Valid Loss: {running_loss_valid / len(sql_test_loader)}")
-    wandb.log({'Epoch': ep,"Train/loss": running_loss_train / len(sql_train_loader), 'Test/loss': running_loss_valid / len(sql_test_loader)})
-
+    run.log({'Epoch': ep,"Train/loss": running_loss_train / len(sql_train_loader), 'Test/loss': running_loss_valid / len(sql_test_loader)})
 wandb.finish()

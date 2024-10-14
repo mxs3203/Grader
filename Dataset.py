@@ -31,5 +31,5 @@ class QuestionDataset(Dataset):
         return {
             'correct_sql': correct_sql_tensor,
             'student_sql': student_sql_tensor,
-            'percent': percent
+            'percentWrong': percent
         }

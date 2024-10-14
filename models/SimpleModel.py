@@ -19,10 +19,10 @@ class SQLComparisonModel(torch.nn.Module):
         hidden_correct = self.a(self.fc(correct_emb))
         hidden_student = self.a(self.fc(student_emb))
 
-        hidden_correct = self.a(self.out(hidden_correct))
-        hidden_student = self.a(self.out(hidden_student))
+        hidden_correct = self.out(hidden_correct)
+        hidden_student = self.out(hidden_student)
 
         # Compute the distance between embeddings (e.g., L2 distance)
         distance = torch.norm(hidden_correct - hidden_student, dim=1)
 
-        return distance
+        return distance, hidden_correct, hidden_student

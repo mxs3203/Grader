@@ -61,7 +61,7 @@ def tokens_to_indices(tokens, vocab):
 
 data = pd.read_csv("data/data.csv")
 data = data[data['maxpoints'] != 0]
-data['percent'] = data['teachergradedpoints']/data['maxpoints']
+data['percentWrong'] = 1-(data['teachergradedpoints']/data['maxpoints'])
 all_text = ' '.join(data['correctsolution'].tolist())
 tokens = sql_tokenizer(all_text)
 token_counter = Counter(tokens)
@@ -78,4 +78,4 @@ max_length = data['studentsolution_indices'].apply(len).max()
 data['correctsolution_padded'] = data['correctsolution_indices'].apply(lambda seq: pad_sequence(seq, max_length))
 data['studentsolution_padded'] = data['studentsolution_indices'].apply(lambda seq: pad_sequence(seq, max_length))
 
-data[['studentsolution_padded', 'correctsolution_padded', 'percent']].to_pickle("data/processed_data.pkl")
+data[['studentsolution_padded', 'correctsolution_padded', 'percentWrong']].to_pickle("data/processed_data.pkl")
