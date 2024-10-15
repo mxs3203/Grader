@@ -17,7 +17,10 @@ import pandas as pd
       A list of tokens extracted from the SQL query.
   """
 def sql_tokenizer(sql_code):
-    sql_code = sql_code.replace('\r\n', '\n').replace('\t', ' ').lower()
+    sql_code = re.sub(r'--.*?(\r\n|\n)', ' ', sql_code)  # Single-line comments
+    sql_code = re.sub(r'/\*.*?\*/', ' ', sql_code, flags=re.DOTALL) # multiline comments
+    sql_code = sql_code.replace('\r\n', ' ').replace('\t', ' ').lower()
+    sql_code = re.sub(r'\s+', ' ', sql_code).strip()
     pattern = r"[\w']+|[.,;()=><!~+*/%-]"
     tokens = re.findall(pattern, sql_code)
 
