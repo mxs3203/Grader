@@ -6,7 +6,6 @@ class SQLComparisonModel(torch.nn.Module):
     def __init__(self, vocab_size, embedding_dim, hidden_dim):
         super(SQLComparisonModel, self).__init__()
         self.embedding = torch.nn.Embedding(vocab_size, embedding_dim)
-        self.pooling = torch.nn.AdaptiveAvgPool1d(1)  # Example pooling layer
         self.fc = nn.Linear(embedding_dim, hidden_dim)
         self.out = nn.Linear(hidden_dim, hidden_dim)
         self.a = nn.ReLU()

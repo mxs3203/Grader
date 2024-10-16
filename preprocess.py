@@ -1,7 +1,23 @@
 import re
 from collections import Counter
 import pickle as pk
+
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+
+
+# Predefined list of SQL keywords and operators
+SQL_KEYWORDS = {
+    'select', 'from', 'where', 'insert', 'update', 'delete', 'join', 'inner', 'left', 'right', 'full', 'outer',
+    'on', 'group', 'by', 'order', 'having', 'limit', 'distinct', 'count', 'sum', 'avg', 'min', 'max',
+    'and', 'or', 'not', 'is', 'null', 'as', 'like', 'in', 'between', 'case', 'when', 'then', 'else', 'end',
+    'create', 'table', 'primary', 'key', 'foreign', 'references', 'drop', 'alter', 'add', 'modify',
+    'union', 'intersect', 'except', 'all', 'exists', 'truncate', 'values'
+}
+
+# SQL operators and symbols to keep
+SQL_OPERATORS = {'.', ',', ';', '(', ')', '=', '>', '<', '+', '-', '*', '/', '%', '!', '~'}
 
 """
   Tokenizes a given SQL query string.
@@ -21,10 +37,21 @@ def sql_tokenizer(sql_code):
     sql_code = re.sub(r'/\*.*?\*/', ' ', sql_code, flags=re.DOTALL) # multiline comments
     sql_code = sql_code.replace('\r\n', ' ').replace('\t', ' ').lower()
     sql_code = re.sub(r'\s+', ' ', sql_code).strip()
-    pattern = r"[\w']+|[.,;()=><!~+*/%-]"
+    pattern = r"[\w]+|[.,;()=><!~+*/%-]|'"
     tokens = re.findall(pattern, sql_code)
+    processed_tokens = []
+    for token in tokens:
+        if '.' in token:
+            # If token is of the form table.column, keep only the column part
+            column_name = token.split('.')[-1]  # Take the part after the last dot
+            processed_tokens.append(column_name)
+        else:
+            # Keep the token if it's not table.column
+            processed_tokens.append(token)
 
-    return tokens
+    #filtered_tokens = [token for token in tokens if token in SQL_KEYWORDS or token in SQL_OPERATORS]
+
+    return processed_tokens#,filtered_tokens
 
 """
     Pads or truncates a sequence to a specified maximum length.
@@ -59,26 +86,46 @@ def pad_sequence(sequence, max_length, pad_value=0):
         A list of integers where each token is replaced by its corresponding index from the `vocab`.
         If a token is not found in the `vocab`, it is replaced by the index of the <UNK> (unknown) token.
 """
-def tokens_to_indices(tokens, vocab):
-    return [vocab.get(token, vocab['<UNK>']) for token in tokens]
+def tokens_to_indices(tokens, vocab, is_student=False):
+    if is_student:
+        # Map student tokens to <UNK> if they are not in the correct vocab
+        return [vocab.get(token, vocab['<UNK>']) for token in tokens]
+    else:
+        # Map correct tokens directly
+        return [vocab[token] for token in tokens]
 
 data = pd.read_csv("data/data.csv")
 data = data[data['maxpoints'] != 0]
 data['percentWrong'] = 1-(data['teachergradedpoints']/data['maxpoints'])
-all_text = ' '.join(data['correctsolution'].tolist())
-tokens = sql_tokenizer(all_text)
-token_counter = Counter(tokens)
-vocab = {token: idx for idx, (token, _) in enumerate(token_counter.items(), start=1)}
-
-# Optionally, add special tokens like <PAD> and <UNK>
+'''
+    Make one string with everything to count the words and make vocabulary
+'''
+# Tokenize all SQL queries and build vocabulary after tokenization
+data['correctsolution_tokenized'] = data['correctsolution'].apply(sql_tokenizer)
+data['studentsolution_tokenized'] = data['studentsolution'].apply(sql_tokenizer)
+correct_tokens_all = [token for tokens in data['correctsolution_tokenized'] for token in tokens]
+correct_token_counter = Counter(correct_tokens_all)
+vocab = {token: idx for idx, token in enumerate(correct_token_counter, start=1)}
 vocab['<PAD>'] = 0
 vocab['<UNK>'] = len(vocab) + 1
-print(len(vocab))
 pk.dump(vocab, open("data/vocab.pkl", "wb"))
-data['correctsolution_indices'] = data['correctsolution'].apply(lambda sql: tokens_to_indices(sql_tokenizer(sql), vocab))
-data['studentsolution_indices'] = data['studentsolution'].apply(lambda sql: tokens_to_indices(sql_tokenizer(sql), vocab))
-max_length = data['studentsolution_indices'].apply(len).max()
-data['correctsolution_padded'] = data['correctsolution_indices'].apply(lambda seq: pad_sequence(seq, max_length))
-data['studentsolution_padded'] = data['studentsolution_indices'].apply(lambda seq: pad_sequence(seq, max_length))
+# Map correct solution tokens to indices
+data['correct_indices'] = data['correctsolution_tokenized'].apply(lambda tokens: tokens_to_indices(tokens, vocab))
+# Map student solution tokens to indices, with <UNK> for unknown tokens
+data['student_indices'] = data['studentsolution_tokenized'].apply(lambda tokens: tokens_to_indices(tokens, vocab, is_student=True))
+
+'''
+    Preprocess the data and save it to a file
+'''
+MAX_SEQUENCE_LENGTH = 150
+data['studentsolution_len'] = data['student_indices'].apply(len)
+data['correctsolution_len'] = data['correct_indices'].apply(len)
+print(np.shape(data))
+data = data[(data['correctsolution_len'] <= MAX_SEQUENCE_LENGTH) & (data['studentsolution_len'] <= MAX_SEQUENCE_LENGTH)]
+print(np.shape(data))
+data['correctsolution_padded'] = data['correct_indices'].apply(lambda seq: pad_sequence(seq, MAX_SEQUENCE_LENGTH ))
+data['studentsolution_padded'] = data['student_indices'].apply(lambda seq: pad_sequence(seq, MAX_SEQUENCE_LENGTH))
 
 data[['studentsolution_padded', 'correctsolution_padded', 'percentWrong']].to_pickle("data/processed_data.pkl")
+data[['studentsolution_padded', 'correctsolution_padded', 'percentWrong']].to_csv("data/processed_data.csv")
+

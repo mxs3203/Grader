@@ -14,6 +14,11 @@ import wandb
 from Dataset import QuestionDataset
 import umap
 from models.SimpleModel import SQLComparisonModel
+
+
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+
 def make_umap(ep,correct_L, student_L, batch_data, percent):
     umap_reducer = umap.UMAP(n_components=2, random_state=27)
     latent_representations = torch.cat((correct_L, student_L), dim=0).cpu().numpy()
@@ -21,13 +26,6 @@ def make_umap(ep,correct_L, student_L, batch_data, percent):
     mini_batch_size = np.shape(batch_data['correct_sql'])[0]
     correct_2d = latent_2d[:mini_batch_size]
     student_2d = latent_2d[mini_batch_size:]
-    df = pd.DataFrame({
-        'UMAP1': latent_2d[:, 0],  # First UMAP component
-        'UMAP2': latent_2d[:, 1],  # Second UMAP component
-        'label': ['correct'] * mini_batch_size + ['student'] * mini_batch_size,  # Label for correct/student
-        'percentWrong': list(percent.detach().cpu().numpy()) + list(percent.detach().cpu().numpy())
-        # Percent repeated for correct/student
-    })
     plt.figure(figsize=(10, 6))
     sns.scatterplot(x=correct_2d[:, 0], y=correct_2d[:, 1], color='blue', label='Correct SQL', marker='o')
     sns.scatterplot(x=student_2d[:, 0], y=student_2d[:, 1], color='red', label='Student SQL', marker='x')
@@ -46,7 +44,7 @@ def make_umap(ep,correct_L, student_L, batch_data, percent):
 Simple augmentation for SQL: randomly mask out some tokens.
 You can implement more sophisticated augmentations if necessary.
 """
-def augment_sql(sql_tensor, augment_percent,UNK_token=366):
+def augment_sql(sql_tensor, augment_percent,UNK_token=323):
 
     sql_tensor = sql_tensor.clone()  # Ensure we're not modifying the original data
     num_tokens = len(sql_tensor)
@@ -109,34 +107,26 @@ else:
 '''
     Setting up the data
 '''
-data = pd.read_pickle("data/processed_data.pkl")
-dataset = QuestionDataset(data, column_names=['studentsolution_padded', 'correctsolution_padded', 'percentWrong'],device=device)
 vocabulary = pickle.load(open("data/vocab.pkl", "rb"))
 vocab_size = len(vocabulary)+1
+UNK_TOKEN = vocabulary['<UNK>']
 print(vocab_size)
-'''
-    Hyperparams
-'''
-#batch_size = 512
-#learning_rate = 0.001
-num_epochs = 50
-#embedding_dim = 64
-#hidden_dim = 64
-#temperature = 0.5
-#augment_percent = 10
+data = pd.read_pickle("data/processed_data.pkl")
+dataset = QuestionDataset(data, column_names=['studentsolution_padded', 'correctsolution_padded', 'percentWrong'],
+                          device=device, vocab_size=vocab_size)
 '''
     Spliting the data
 '''
 train_size = int(0.7 * len(dataset))  # 70% for training
 test_size = len(dataset) - train_size
-train_dataset, test_dataset = random_split(dataset,  [train_size, test_size] )
+train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 '''
     Init everything
 '''
-
 def objective(trial):
     # Sample hyperparameters randomly within certain ranges
-    batch_size = 512 #trial.suggest_categorical('batch_size', [128, 256, 512, 1024])
+    num_epochs = 50
+    batch_size = 1024
     learning_rate = trial.suggest_float('learning_rate', 1e-5, 1e-2)
     embedding_dim = trial.suggest_int('embedding_dim', 32, 128)
     hidden_dim = trial.suggest_int('hidden_dim', 32, 128)
@@ -187,8 +177,8 @@ def run_training(model, optim, batch_size,num_epochs,augment_percent, temperatur
         for i,batch_data in enumerate(sql_train_loader):
             correct_sql, student_sql, percent = batch_data['correct_sql'], batch_data['student_sql'], batch_data['percentWrong']
             optim.zero_grad()
-            aug_correct_sql = torch.stack([augment_sql(sql,augment_percent) for sql in correct_sql]).to(device)
-            aug_student_sql = torch.stack([augment_sql(sql,augment_percent) for sql in student_sql]).to(device)
+            aug_correct_sql = torch.stack([augment_sql(sql,augment_percent, UNK_token=UNK_TOKEN) for sql in correct_sql]).to(device)
+            aug_student_sql = torch.stack([augment_sql(sql,augment_percent, UNK_token=UNK_TOKEN) for sql in student_sql]).to(device)
             L_correct = model(aug_correct_sql)
             L_student = model(aug_student_sql)
             loss = nt_xent_loss(L_correct,L_student, temperature=temperature)
@@ -200,8 +190,8 @@ def run_training(model, optim, batch_size,num_epochs,augment_percent, temperatur
             model.eval()
             for i,batch_data in enumerate(sql_test_loader):
                 correct_sql, student_sql, percent = batch_data['correct_sql'], batch_data['student_sql'], batch_data['percentWrong']
-                aug_correct_sql = torch.stack([augment_sql(sql,augment_percent) for sql in correct_sql]).to(device)
-                aug_student_sql = torch.stack([augment_sql(sql,augment_percent) for sql in student_sql]).to(device)
+                aug_correct_sql = torch.stack([augment_sql(sql,augment_percent, UNK_token=UNK_TOKEN) for sql in correct_sql]).to(device)
+                aug_student_sql = torch.stack([augment_sql(sql,augment_percent, UNK_token=UNK_TOKEN) for sql in student_sql]).to(device)
                 L_correct = model(aug_correct_sql)
                 L_student = model(aug_student_sql)
                 loss = nt_xent_loss(L_correct,L_student, temperature=temperature)
@@ -217,6 +207,6 @@ def run_training(model, optim, batch_size,num_epochs,augment_percent, temperatur
     return running_loss_valid / len(sql_test_loader)
 
 study = optuna.create_study(direction='minimize')
-study.optimize(objective, n_trials=50, n_jobs=2)
+study.optimize(objective, n_trials=50, n_jobs=1)
 df_trials = study.trials_dataframe()
 df_trials.to_csv('optuna_trials.csv', index=False)

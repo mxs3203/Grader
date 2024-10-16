@@ -6,8 +6,9 @@ import pandas as pd
 
 
 class QuestionDataset(Dataset):
-    def __init__(self, data, column_names, device):
+    def __init__(self, data, column_names, device,vocab_size):
         self.data = data
+        self.vocab_size = vocab_size
         self.correct_column = column_names[1]
         self.student_column = column_names[0]
         self.points_column = column_names[2]
@@ -26,6 +27,12 @@ class QuestionDataset(Dataset):
             student_sql = ast.literal_eval(student_sql)
         correct_sql_tensor = torch.tensor(correct_sql, dtype=torch.long, device=self.device)
         student_sql_tensor = torch.tensor(student_sql, dtype=torch.long, device=self.device)
+        if (correct_sql_tensor >= self.vocab_size).any().item():
+            raise ValueError(f"Some indices in correct_sql_tensor exceed the vocabulary size {self.vocab_size}")
+
+        if (student_sql_tensor >= self.vocab_size).any().item():
+            raise ValueError(f"Some indices in student_sql_tensor exceed the vocabulary size {self.vocab_size}")
+
         percent = torch.tensor(self.data.iloc[idx][self.points_column], dtype=torch.float32,
                                device=self.device)
         return {
