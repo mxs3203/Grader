@@ -120,6 +120,10 @@ data['student_indices'] = data['studentsolution_tokenized'].apply(lambda tokens:
 MAX_SEQUENCE_LENGTH = 150
 data['studentsolution_len'] = data['student_indices'].apply(len)
 data['correctsolution_len'] = data['correct_indices'].apply(len)
+plt.hist(data['studentsolution_len'],bins=40)
+plt.hist(data['correctsolution_len'], bins=40)
+plt.legend(['studentsolution', 'correctsolution'])
+plt.show()
 print(np.shape(data))
 data = data[(data['correctsolution_len'] <= MAX_SEQUENCE_LENGTH) & (data['studentsolution_len'] <= MAX_SEQUENCE_LENGTH)]
 print(np.shape(data))

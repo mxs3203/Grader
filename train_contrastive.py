@@ -46,7 +46,7 @@ def make_umap(ep,correct_L, student_L, batch_data, percent):
 Simple augmentation for SQL: randomly mask out some tokens.
 You can implement more sophisticated augmentations if necessary.
 """
-def augment_sql(sql_tensor, augment_percent,UNK_token=366):
+def augment_sql(sql_tensor, augment_percent,UNK_token=323):
 
     sql_tensor = sql_tensor.clone()  # Ensure we're not modifying the original data
     num_tokens = len(sql_tensor)
@@ -109,22 +109,22 @@ else:
 '''
     Setting up the data
 '''
-data = pd.read_pickle("data/processed_data.pkl")
-dataset = QuestionDataset(data, column_names=['studentsolution_padded', 'correctsolution_padded', 'percentWrong'],device=device)
-
 vocabulary = pickle.load(open("data/vocab.pkl", "rb"))
 vocab_size = len(vocabulary)+1
 print(vocab_size)
+UNK_TOKEN = vocabulary['<UNK>']
+data = pd.read_pickle("data/processed_data.pkl")
+dataset = QuestionDataset(data, column_names=['studentsolution_padded', 'correctsolution_padded', 'percentWrong'],device=device,vocab_size=vocab_size)
 '''
     Hyperparams
 '''
-batch_size = 512
-learning_rate = 0.005190333373011799
+batch_size = 1024
+learning_rate = 0.009041997700741756
 num_epochs = 300
-embedding_dim = 61
-hidden_dim = 94
-temperature = 0.11233895703689933
-augment_percent = 10
+embedding_dim = 56
+hidden_dim = 64
+temperature = 0.10843492924798964
+augment_percent = 14
 '''
     Spliting the data
 '''
@@ -171,8 +171,8 @@ for ep in range(num_epochs):
     for i,batch_data in enumerate(sql_train_loader):
         correct_sql, student_sql, percent = batch_data['correct_sql'], batch_data['student_sql'], batch_data['percentWrong']
         optim.zero_grad()
-        aug_correct_sql = torch.stack([augment_sql(sql,augment_percent) for sql in correct_sql]).to(device)
-        aug_student_sql = torch.stack([augment_sql(sql,augment_percent) for sql in student_sql]).to(device)
+        aug_correct_sql = torch.stack([augment_sql(sql,augment_percent, UNK_TOKEN) for sql in correct_sql]).to(device)
+        aug_student_sql = torch.stack([augment_sql(sql,augment_percent, UNK_TOKEN) for sql in student_sql]).to(device)
         L_correct = model(aug_correct_sql)
         L_student = model(aug_student_sql)
         loss = nt_xent_loss(L_correct,L_student, temperature=temperature)
@@ -184,8 +184,8 @@ for ep in range(num_epochs):
         model.eval()
         for i,batch_data in enumerate(sql_test_loader):
             correct_sql, student_sql, percent = batch_data['correct_sql'], batch_data['student_sql'], batch_data['percentWrong']
-            aug_correct_sql = torch.stack([augment_sql(sql,augment_percent) for sql in correct_sql]).to(device)
-            aug_student_sql = torch.stack([augment_sql(sql,augment_percent) for sql in student_sql]).to(device)
+            aug_correct_sql = torch.stack([augment_sql(sql,augment_percent, UNK_TOKEN) for sql in correct_sql]).to(device)
+            aug_student_sql = torch.stack([augment_sql(sql,augment_percent, UNK_TOKEN) for sql in student_sql]).to(device)
             L_correct = model(aug_correct_sql)
             L_student = model(aug_student_sql)
             loss = nt_xent_loss(L_correct,L_student, temperature=temperature)

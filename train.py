@@ -10,6 +10,8 @@ from torch.utils.data import random_split
 import wandb
 from Dataset import QuestionDataset
 import umap
+
+from models.PredictPercentContrastive import SQLPredictorModel
 from models.SimpleModel import SQLComparisonModel
 def make_umap(correct_L, student_L, batch_data,distance, percent):
     umap_reducer = umap.UMAP(n_components=2, random_state=27)
@@ -62,17 +64,17 @@ else:
 '''
     Setting up the data
 '''
-data = pd.read_pickle("data/processed_data.pkl")
-dataset = QuestionDataset(data, column_names=['studentsolution_padded', 'correctsolution_padded', 'percentWrong'],device=device)
 vocabulary = pickle.load(open("data/vocab.pkl", "rb"))
 vocab_size = len(vocabulary)+1
 print(vocab_size)
+data = pd.read_pickle("data/processed_data.pkl")
+dataset = QuestionDataset(data, column_names=['studentsolution_padded', 'correctsolution_padded', 'percentWrong'],device=device, vocab_size=vocab_size)
 '''
     Hyperparams
 '''
 batch_size = 256
-learning_rate = 0.001
-num_epochs = 10
+learning_rate = 0.0001
+num_epochs = 300
 embedding_dim = 64
 hidden_dim = 64
 
@@ -87,7 +89,11 @@ sql_test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_siz
 '''
     Init everything
 '''
-model = SQLComparisonModel(vocab_size=vocab_size, embedding_dim=embedding_dim, hidden_dim=hidden_dim).to(device)
+#model = SQLComparisonModel(vocab_size=vocab_size, embedding_dim=embedding_dim, hidden_dim=hidden_dim).to(device)
+contrastive_model = torch.load("contrastive.pth").to(device)
+for param in contrastive_model.parameters():
+    param.requires_grad = True
+model = SQLPredictorModel(contrastive_model,embedding_dim, hidden_dim).to(device)
 model.train()
 optim = torch.optim.Adam(model.parameters(), lr=learning_rate)
 loss_fn = torch.nn.MSELoss(reduction='mean')
