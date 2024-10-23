@@ -125,7 +125,7 @@ train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 '''
 def objective(trial):
     # Sample hyperparameters randomly within certain ranges
-    num_epochs = 50
+    num_epochs = 30
     batch_size = 1024
     learning_rate = trial.suggest_float('learning_rate', 1e-5, 1e-2)
     embedding_dim = trial.suggest_int('embedding_dim', 32, 128)

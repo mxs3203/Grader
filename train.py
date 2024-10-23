@@ -74,8 +74,8 @@ dataset = QuestionDataset(data, column_names=['studentsolution_padded', 'correct
 '''
 batch_size = 256
 learning_rate = 0.0001
-num_epochs = 300
-embedding_dim = 64
+num_epochs = 150
+embedding_dim = 95
 hidden_dim = 64
 
 '''

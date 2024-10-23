@@ -1,6 +1,7 @@
 import re
 from collections import Counter
 import pickle as pk
+from random import shuffle
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -41,13 +42,10 @@ def sql_tokenizer(sql_code):
     tokens = re.findall(pattern, sql_code)
     processed_tokens = []
     for token in tokens:
-        if '.' in token:
-            # If token is of the form table.column, keep only the column part
-            column_name = token.split('.')[-1]  # Take the part after the last dot
-            processed_tokens.append(column_name)
-        else:
-            # Keep the token if it's not table.column
+        if '.' != token:
             processed_tokens.append(token)
+        else:
+            print("We dont want this: ",token)
 
     #filtered_tokens = [token for token in tokens if token in SQL_KEYWORDS or token in SQL_OPERATORS]
 
@@ -96,6 +94,9 @@ def tokens_to_indices(tokens, vocab, is_student=False):
 
 data = pd.read_csv("data/data.csv")
 data = data[data['maxpoints'] != 0]
+#data = data.sample(1000)
+
+data['percent'] = data['teachergradedpoints']/data['maxpoints']
 data['percentWrong'] = 1-(data['teachergradedpoints']/data['maxpoints'])
 '''
     Make one string with everything to count the words and make vocabulary
@@ -117,7 +118,7 @@ data['student_indices'] = data['studentsolution_tokenized'].apply(lambda tokens:
 '''
     Preprocess the data and save it to a file
 '''
-MAX_SEQUENCE_LENGTH = 150
+MAX_SEQUENCE_LENGTH = 180
 data['studentsolution_len'] = data['student_indices'].apply(len)
 data['correctsolution_len'] = data['correct_indices'].apply(len)
 plt.hist(data['studentsolution_len'],bins=40)
@@ -130,6 +131,6 @@ print(np.shape(data))
 data['correctsolution_padded'] = data['correct_indices'].apply(lambda seq: pad_sequence(seq, MAX_SEQUENCE_LENGTH ))
 data['studentsolution_padded'] = data['student_indices'].apply(lambda seq: pad_sequence(seq, MAX_SEQUENCE_LENGTH))
 
-data[['studentsolution_padded', 'correctsolution_padded', 'percentWrong']].to_pickle("data/processed_data.pkl")
-data[['studentsolution_padded', 'correctsolution_padded', 'percentWrong']].to_csv("data/processed_data.csv")
+data[['studentsolution_padded', 'correctsolution_padded', 'percentWrong', 'percent']].to_pickle("data/processed_data.pkl")
+data[['studentsolution_padded', 'correctsolution_padded', 'percentWrong', 'percent']].to_csv("data/processed_data.csv")
 
