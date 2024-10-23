@@ -17,3 +17,11 @@ class SQLPredictorModel(torch.nn.Module):
         hidden = self.out(hidden)
         hidden_normalized = F.normalize(hidden, p=2, dim=1)
         return hidden_normalized
+
+    def forward_embeddings(self, sql_emb):
+        # New method accepting embeddings directly
+        sql = self.contrastive_model.forward_embeddings(sql_emb)
+        hidden = self.a(self.fc(sql))
+        hidden = self.out(hidden)
+        hidden_normalized = F.normalize(hidden, p=2, dim=1)
+        return hidden_normalized

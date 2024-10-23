@@ -125,13 +125,13 @@ train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 '''
 def objective(trial):
     # Sample hyperparameters randomly within certain ranges
-    num_epochs = 30
-    batch_size = 1024
+    num_epochs = 50
+    batch_size = 512
     learning_rate = trial.suggest_float('learning_rate', 1e-5, 1e-2)
-    embedding_dim = trial.suggest_int('embedding_dim', 32, 128)
-    hidden_dim = trial.suggest_int('hidden_dim', 32, 128)
-    temperature = trial.suggest_float('temperature', 0.1, 0.9)
-    augment_percent = trial.suggest_int('augment_percent', 5, 30)
+    embedding_dim = trial.suggest_int('embedding_dim', 32, 256)
+    hidden_dim = trial.suggest_int('hidden_dim', 32, 256)
+    temperature = trial.suggest_float('temperature', 0.1, 0.4)
+    augment_percent = trial.suggest_int('augment_percent', 10, 25)
     # build data loaders
     sql_train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     sql_test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
@@ -155,7 +155,7 @@ def run_training(model, optim, batch_size,num_epochs,augment_percent, temperatur
         # set the wandb project where this run will be logged
         project="Grader",
         entity="mxs3203",
-        name="ContrastiveSimpleEmbedding_Emb{}_Hid{}".format(embedding_dim, hidden_dim),
+        name="Optuna_ContrastiveSimpleEmbedding_Emb{}_Hid{}".format(embedding_dim, hidden_dim),
         # track hyperparameters and run metadata
         config={
             "batch_size": batch_size,
@@ -203,7 +203,6 @@ def run_training(model, optim, batch_size,num_epochs,augment_percent, temperatur
               f"Valid Loss: {running_loss_valid / len(sql_test_loader)}")
         run.log({'Epoch': ep,"Train/loss": running_loss_train / len(sql_train_loader), 'Test/loss': running_loss_valid / len(sql_test_loader)})
     wandb.finish()
-    #torch.save(model, "{}.pth".format())
     return running_loss_valid / len(sql_test_loader)
 
 study = optuna.create_study(direction='minimize')

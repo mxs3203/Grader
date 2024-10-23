@@ -5,6 +5,7 @@ import pandas as pd
 import torch
 from matplotlib import colors, pyplot as plt
 from torch import nn
+from tqdm import tqdm
 
 from Dataset import QuestionDataset
 
@@ -23,8 +24,7 @@ else:
     device = "cpu"
 
 
-def visualize_token_impact(student_sql_words, correct_sql_words, changes, title="Impact of Tokens on Student SQL",
-                           cutoff=0.1):
+def visualize_token_impact(student_sql_words, correct_sql_words, changes, title,base_distance):
     """
     Visualize tokens with black for low impact and red for high impact based on a cutoff value.
     Display both correct and student SQL side by side.
@@ -37,14 +37,21 @@ def visualize_token_impact(student_sql_words, correct_sql_words, changes, title=
         cutoff (float): Cutoff value for considering high vs low impact.
         max_tokens_per_line (int): Maximum number of tokens per line for better readability.
     """
+    total_tokens = len(student_sql_words)
+    scaled_top_k = int(base_distance * total_tokens)  # Scale top_k with distance
+    if scaled_top_k == 0:
+        # If the distance is very small (likely correct), no tokens will be highlighted
+        print(f"Predicted distance is small ({base_distance}), no tokens are highlighted.")
+
+    # Sort the tokens by impact and get the indices of the top-k tokens with the highest impact
+    top_k_indices = np.argsort(changes)[-scaled_top_k:]
     # Ensure that the student_sql_words and changes have the same length
     assert len(student_sql_words) == len(changes), "Mismatch between student SQL words and impact values"
     # Create a figure and axis
     plt.figure(figsize=(20, 8))
     ax = plt.gca()
     ax.set_axis_off()
-    max_tokens = 20
-    rows = 0
+    max_tokens = 12
     # Plot Correct SQL (no color coding, just plain text)
     x, y = -0.1, 0.8  # Starting position for correct solution
     for i, token in enumerate(correct_sql_words):
@@ -52,22 +59,28 @@ def visualize_token_impact(student_sql_words, correct_sql_words, changes, title=
             if i % max_tokens == 0 and i > 0:
                 x = 0  # Reset x for new line
                 y -= 0.04  # Move down to next line
-            plt.text(x, y, token, fontsize=12, color='black', weight='bold')  # Correct solution in black
-            x += 0.05  # Move x position based on token length
+            plt.text(x, y, token, fontsize=10, color='black', weight='bold')  # Correct solution in black
+            x += 0.09  # Move x position based on token length
 
+    student_tokens_to_report = []
     x, y = -0.1, y - 0.2  # Start student SQL below the correct solution
     for i, (token, impact) in enumerate(zip(student_sql_words, changes)):
         if token != "<PAD>":
             if i % max_tokens == 0 and i > 0:
                 x = 0  # Reset x for new line
                 y -= 0.04  # Move down to next line
-            color = 'red' if impact >= cutoff else 'black'
-            plt.text(x, y, token, fontsize=12, color=color, weight='bold')
-            x += 0.05  # Move x position based on token length
+            if i in top_k_indices:
+                student_tokens_to_report.append((token,impact))
+                color = 'red'
+            else:
+                color = 'black'
+            plt.text(x, y, token, fontsize=10, color=color, weight='bold')
+            x += 0.09  # Move x position based on token length
 
     # Set title and show plot
     plt.title(title, fontsize=16)
-    plt.show()
+    #plt.show()
+    return student_tokens_to_report
 
 def indices_to_words(indices, vocab):
     # Invert the vocabulary to map indices back to words
@@ -85,6 +98,7 @@ def perturbation_analysis(correct_sql, student_sql, model, UNK_TOKEN):
     distance_changes = []
     for i in range(student_sql.size(1)):  # Iterate over the token positions
         perturbed_student = student_sql.clone()
+        replaced_token = perturbed_student[:, i]
         perturbed_student[:, i] = UNK_TOKEN  # Replace token with UNKNOWN token
 
         perturbed_latent_student = model(perturbed_student)
@@ -112,17 +126,32 @@ dataset = QuestionDataset(data, column_names=['studentsolution_padded', 'correct
 loader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True)
 model = torch.load("model_full.pth")
 model.eval()
-for i, batch_data in enumerate(loader):
+results = []
+for i, batch_data in tqdm(enumerate(loader)):
     correct_sql, student_sql, percent = batch_data['correct_sql'], batch_data['student_sql'], batch_data['percentWrong'].detach()
     correct_sql_words = [indices_to_words(indices, vocabulary) for indices in correct_sql.detach().cpu().numpy()]
     student_sql_words = [indices_to_words(indices, vocabulary) for indices in student_sql.detach().cpu().numpy()]
 
-    changes,base_distance = perturbation_analysis(correct_sql, student_sql, model,UNK_TOKEN)
-    cutoff = (base_distance * np.median(np.abs(changes)))
+    changes, base_distance = perturbation_analysis(correct_sql, student_sql, model,UNK_TOKEN)
     token_impact_dict = tokens_to_dataframe(student_sql_words[0],correct_sql_words[0], changes)
 
-    visualize_token_impact(student_sql_words[0], correct_sql_words[0], changes,
+    student_tokens_to_report = visualize_token_impact(student_sql_words[0], correct_sql_words[0], changes,
                            title="Impact of Changes on Student SQL True points {} - Predicted {}".format(percent.item(),
                                                                                                          base_distance.item().__round__(3)),
-                           cutoff=cutoff)
-    print(f"Distance changes after perturbation: {changes}")
+                           base_distance=base_distance)
+    #print(f"Distance changes after perturbation: {changes}")
+    # Store results in a dictionary
+    result = {
+        'student_full_solution': ' '.join(student_sql_words[0]),  # Full student SQL solution as a string
+        'correct_full_solution': ' '.join(correct_sql_words[0]),  # Full correct SQL solution as a string
+        'predicted_distance': base_distance.item(),  # Predicted distance
+        'percentWrong': percent.item(),  # Ground truth percentWrong
+        'student_tokens_to_report': student_tokens_to_report,  # Tokens from student solution to report
+    }
+    results.append(result)
+    if i == 10:
+        break
+
+# Convert the list of results into a DataFrame
+results_df = pd.DataFrame(results)
+results_df.to_csv("graded.csv", index=False)

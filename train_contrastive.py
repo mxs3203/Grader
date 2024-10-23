@@ -118,12 +118,12 @@ dataset = QuestionDataset(data, column_names=['studentsolution_padded', 'correct
 '''
     Hyperparams
 '''
-batch_size = 1024
-learning_rate = 0.0031321
-num_epochs = 300
-embedding_dim = 93
-hidden_dim = 118
-temperature = 0.10684
+batch_size = 512
+learning_rate = 0.004734096563558571
+num_epochs = 500
+embedding_dim = 200
+hidden_dim = 176
+temperature = 0.14295679230062186
 augment_percent = 20
 '''
     Spliting the data

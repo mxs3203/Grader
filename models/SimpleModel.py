@@ -18,3 +18,11 @@ class SQLComparisonModel(torch.nn.Module):
         hidden = self.out(hidden)
         hidden_normalized = F.normalize(hidden, p=2, dim=1)
         return hidden_normalized
+
+    def forward_embeddings(self, sql_emb):
+        # New method accepting embeddings directly
+        sql_emb_pooled = sql_emb.mean(dim=1)  # (batch_size, embedding_dim)
+        hidden = self.a(self.fc(sql_emb_pooled))
+        hidden = self.out(hidden)
+        hidden_normalized = F.normalize(hidden, p=2, dim=1)
+        return hidden_normalized
