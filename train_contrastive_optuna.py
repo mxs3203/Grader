@@ -15,7 +15,7 @@ from Dataset import QuestionDataset
 import umap
 from models.SimpleModel import SQLComparisonModel
 
-
+print(torch.__version__)
 import os
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 

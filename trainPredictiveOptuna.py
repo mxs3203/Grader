@@ -53,7 +53,7 @@ train_dataset, test_dataset = random_split(dataset,  [train_size, test_size])
 '''
 def objective(trial):
     # Sample hyperparameters randomly within certain ranges
-    num_epochs = 50
+    num_epochs = 100
     batch_size = 256
     fine_tune_or_transfer = trial.suggest_categorical('fine_tune', [True, False])
     distance_measure = 'fro'#trial.suggest_categorical('distance_measure', ['fro', 'nuc'])

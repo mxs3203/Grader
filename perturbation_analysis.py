@@ -149,7 +149,7 @@ for i, batch_data in tqdm(enumerate(loader)):
         'student_tokens_to_report': student_tokens_to_report,  # Tokens from student solution to report
     }
     results.append(result)
-    if i == 10:
+    if i == 100:
         break
 
 # Convert the list of results into a DataFrame

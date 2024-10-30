@@ -40,7 +40,7 @@ def make_umap(ep,correct_L, student_L, batch_data, percent):
                  linestyle='--')
         mid_point = (correct_point + student_point) / 2  # Midpoint between correct and student points
         plt.text(mid_point[0], mid_point[1], f'{percent[j]:.2f}', fontsize=9, color='black', ha='center')
-    plt.savefig("plots/UMAP_{}.png".format(ep))
+    plt.savefig("plots/UMAP_{}.pdf".format(ep))
 
 """
 Simple augmentation for SQL: randomly mask out some tokens.
@@ -118,7 +118,7 @@ dataset = QuestionDataset(data, column_names=['studentsolution_padded', 'correct
 '''
     Hyperparams
 '''
-batch_size = 512
+batch_size = 600
 learning_rate = 0.004734096563558571
 num_epochs = 500
 embedding_dim = 200

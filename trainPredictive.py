@@ -73,11 +73,10 @@ dataset = QuestionDataset(data, column_names=['studentsolution_padded', 'correct
     Hyperparams
 '''
 batch_size = 256
-learning_rate = 0.0001
-num_epochs = 50
-embedding_dim = 118
-hidden_dim = 64
-
+learning_rate = 0.005733257548958954
+num_epochs = 500
+embedding_dim = 176
+hidden_dim = 116
 '''
     Spliting the data
 '''
@@ -89,7 +88,6 @@ sql_test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_siz
 '''
     Init everything
 '''
-#model = SQLComparisonModel(vocab_size=vocab_size, embedding_dim=embedding_dim, hidden_dim=hidden_dim).to(device)
 contrastive_model = torch.load("contrastive.pth").to(device)
 for param in contrastive_model.parameters():
     param.requires_grad = True
@@ -105,7 +103,7 @@ run = wandb.init(
     # set the wandb project where this run will be logged
     project="Grader",
     entity="mxs3203",
-    name="SimpleEmbedding_Emb{}_Hid{}".format(embedding_dim, hidden_dim),
+    name="Predictive_SimpleEmbedding_Emb{}_Hid{}".format(embedding_dim, hidden_dim),
     # track hyperparameters and run metadata
     config={
         "batch_size": batch_size,

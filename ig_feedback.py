@@ -88,7 +88,7 @@ for i, batch_data in tqdm(enumerate(loader), total=len(dataset)):
     res_sorted = res.sort_values(by='att', ascending=False)
     top_5 = res_sorted.head(5)[['token', 'att']].values.tolist()
     bottom_5 = res_sorted.tail(5)[['token', 'att']].values.tolist()
-    visualize_attribution(res)
+    #visualize_attribution(res)
     result = {
         'student_full_solution': ' '.join([token for token in student_sql_words[0] if token != '<PAD>']),  # Full student SQL solution as a string
         'correct_full_solution': ' '.join([token for token in correct_sql_words[0] if token != '<PAD>']),  # Full correct SQL solution as a string
@@ -98,6 +98,8 @@ for i, batch_data in tqdm(enumerate(loader), total=len(dataset)):
         'student_tokens_why_correct': bottom_5,
     }
     results.append(result)
+    if i == 100:
+        break
 
 
 # Convert the list of results into a DataFrame
