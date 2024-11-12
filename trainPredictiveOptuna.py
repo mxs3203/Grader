@@ -15,6 +15,15 @@ import umap
 from models.PredictPercentContrastive import SQLPredictorModel
 from models.SimpleModel import SQLComparisonModel
 
+from optuna.visualization import plot_contour
+from optuna.visualization import plot_edf
+from optuna.visualization import plot_intermediate_values
+from optuna.visualization import plot_optimization_history
+from optuna.visualization import plot_parallel_coordinate
+from optuna.visualization import plot_param_importances
+from optuna.visualization import plot_rank
+from optuna.visualization import plot_slice
+from optuna.visualization import plot_timeline
 
 if torch.cuda.is_available():
     print("CUDA is available! PyTorch is using GPU acceleration.")
@@ -53,12 +62,12 @@ train_dataset, test_dataset = random_split(dataset,  [train_size, test_size])
 '''
 def objective(trial):
     # Sample hyperparameters randomly within certain ranges
-    num_epochs = 100
+    num_epochs = 50
     batch_size = 256
     fine_tune_or_transfer = trial.suggest_categorical('fine_tune', [True, False])
     distance_measure = 'fro'#trial.suggest_categorical('distance_measure', ['fro', 'nuc'])
-    learning_rate = trial.suggest_float('learning_rate', 1e-5, 1e-2)
-    embedding_dim = 176 # must be compatible with contrastive
+    learning_rate = trial.suggest_float('learning_rate', 0.003, 0.005)
+    embedding_dim = 227 # must be compatible with contrastive
     hidden_dim = trial.suggest_int('hidden_dim', 32, 256)
     # build data loaders
     sql_train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -73,32 +82,15 @@ def objective(trial):
     loss_fn = torch.nn.MSELoss(reduction='mean')
     torch.cuda.empty_cache()
     # For demonstration, assume loss is computed here (replace with actual training logic)
-    loss = run_training(model, loss_fn, optimizer, batch_size, num_epochs, sql_train_loader, sql_test_loader, embedding_dim, hidden_dim,learning_rate, distance_measure, fine_tune_or_transfer)
+    loss = run_training(model, loss_fn, optimizer, batch_size, num_epochs, sql_train_loader, sql_test_loader, distance_measure, trial)
 
     return loss
 
 '''
     Training loop
 '''
-def run_training(model,loss_fn, optim, batch_size,num_epochs, sql_train_loader, sql_test_loader,embedding_dim, hidden_dim,learning_rate, distance_measure, fine_tune_or_transfer):
-    run = wandb.init(
-        # set the wandb project where this run will be logged
-        project="Grader",
-        entity="mxs3203",
-        name="Optuna_SimpleEmbedding_Emb{}_Hid{}".format(embedding_dim, hidden_dim),
-        # track hyperparameters and run metadata
-        config={
-            "batch_size": batch_size,
-            "distance_measure": distance_measure,
-            "fine_tune_or_transfer": fine_tune_or_transfer,
-            "embedding_dim": embedding_dim,
-            "hidden_dim": hidden_dim,
-            "learning_rate": learning_rate,
-            "architecture": "Embedding+Linear",
-            "dataset": "PostgresSQL",
-            "epochs": num_epochs,
-        }
-    )
+def run_training(model,loss_fn, optim, batch_size,num_epochs, sql_train_loader, sql_test_loader, distance_measure, trial):
+    best_loss = 1000
     for ep in range(num_epochs):
         model.train()
         running_loss_train = 0.0
@@ -117,6 +109,7 @@ def run_training(model,loss_fn, optim, batch_size,num_epochs, sql_train_loader, 
 
         with torch.no_grad():
             model.eval()
+
             for i,batch_data in enumerate(sql_test_loader):
                 correct_sql, student_sql, percent = batch_data['correct_sql'], batch_data['student_sql'], batch_data['percentWrong']
                 L_correct = model(correct_sql)
@@ -124,14 +117,23 @@ def run_training(model,loss_fn, optim, batch_size,num_epochs, sql_train_loader, 
                 distance = torch.norm(L_correct - L_student, dim=1, p=distance_measure)
                 loss = loss_fn(distance, percent)
                 running_loss_valid += loss.item()
-
+        trial.report(running_loss_valid / len(sql_test_loader), ep)
+        if running_loss_valid / len(sql_test_loader) < best_loss:
+            best_loss = running_loss_valid / len(sql_test_loader)
+        if trial.should_prune():
+            raise optuna.TrialPruned()
         print(f"Epoch [{ep + 1}/{num_epochs}], Train Loss: {running_loss_train / len(sql_train_loader):.4f}, "
               f"Valid Loss: {running_loss_valid / len(sql_test_loader)}")
-        run.log({'Epoch': ep,"Train/loss": running_loss_train / len(sql_train_loader), 'Test/loss': running_loss_valid / len(sql_test_loader)})
-    wandb.finish()
-    return running_loss_valid / len(sql_test_loader)
 
-study = optuna.create_study(direction='minimize')
+    return best_loss
+
+study = optuna.create_study(direction='minimize',
+                            sampler=optuna.samplers.TPESampler(seed=27),
+                            pruner=optuna.pruners.MedianPruner(),
+                            storage="sqlite:///db.sqlite3",
+                            study_name="predictive_optuna")
 study.optimize(objective, n_trials=50, n_jobs=1)
 df_trials = study.trials_dataframe()
+with open('optuna_study_object_predictive.pkl', 'wb') as file:
+    pickle.dump(study, file)
 df_trials.to_csv('optuna_trials_predictive.csv', index=False)

@@ -72,11 +72,12 @@ dataset = QuestionDataset(data, column_names=['studentsolution_padded', 'correct
 '''
     Hyperparams
 '''
-batch_size = 256
-learning_rate = 0.005733257548958954
-num_epochs = 500
-embedding_dim = 176
-hidden_dim = 116
+batch_size = 128
+learning_rate = 0.0004724101
+num_epochs = 50
+embedding_dim = 30
+hidden_dim = 30
+allow_cntrastive_train = True
 '''
     Spliting the data
 '''
@@ -88,10 +89,11 @@ sql_test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_siz
 '''
     Init everything
 '''
-contrastive_model = torch.load("contrastive.pth").to(device)
-for param in contrastive_model.parameters():
-    param.requires_grad = True
-model = SQLPredictorModel(contrastive_model,embedding_dim, hidden_dim).to(device)
+contrastive = torch.load("contrastive.pth").to(device)
+for param in contrastive.parameters():
+    param.requires_grad = allow_cntrastive_train
+#contrastive = SQLComparisonModel(vocab_size=vocab_size, embedding_dim=93, hidden_dim=227).to(device) # if running from scrath
+model = SQLPredictorModel(contrastive,embedding_dim, hidden_dim).to(device)
 model.train()
 optim = torch.optim.Adam(model.parameters(), lr=learning_rate)
 loss_fn = torch.nn.MSELoss(reduction='mean')

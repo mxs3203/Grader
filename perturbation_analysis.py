@@ -3,12 +3,13 @@ import pickle
 import numpy as np
 import pandas as pd
 import torch
+import umap
 from matplotlib import colors, pyplot as plt
 from torch import nn
 from tqdm import tqdm
 
 from Dataset import QuestionDataset
-
+import seaborn as sns
 if torch.cuda.is_available():
     print("CUDA is available! PyTorch is using GPU acceleration.")
     # Setup
@@ -48,7 +49,7 @@ def visualize_token_impact(student_sql_words, correct_sql_words, changes, title,
     # Ensure that the student_sql_words and changes have the same length
     assert len(student_sql_words) == len(changes), "Mismatch between student SQL words and impact values"
     # Create a figure and axis
-    plt.figure(figsize=(20, 8))
+    plt.figure(figsize=(20, 15))
     ax = plt.gca()
     ax.set_axis_off()
     max_tokens = 12
@@ -79,7 +80,7 @@ def visualize_token_impact(student_sql_words, correct_sql_words, changes, title,
 
     # Set title and show plot
     plt.title(title, fontsize=16)
-    #plt.show()
+    plt.savefig("plots/student_vs_correct.pdf")
     return student_tokens_to_report
 
 def indices_to_words(indices, vocab):
@@ -121,20 +122,34 @@ vocabulary = pickle.load(open("data/vocab.pkl", "rb"))
 vocab_size = len(vocabulary)+1
 UNK_TOKEN = vocabulary['<UNK>']
 print(vocab_size)
+device = 'cpu'
 data = pd.read_pickle("data/processed_data.pkl")
+#data = data[(data['percentWrong'] >= 0.3) & (data['percentWrong'] <= 0.6)]
 dataset = QuestionDataset(data, column_names=['studentsolution_padded', 'correctsolution_padded', 'percentWrong'],device=device, vocab_size=vocab_size)
 loader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True)
-model = torch.load("model_full.pth")
+model = torch.load("model_full.pth").to(device)
 model.eval()
 results = []
 for i, batch_data in tqdm(enumerate(loader)):
     correct_sql, student_sql, percent = batch_data['correct_sql'], batch_data['student_sql'], batch_data['percentWrong'].detach()
+
     correct_sql_words = [indices_to_words(indices, vocabulary) for indices in correct_sql.detach().cpu().numpy()]
     student_sql_words = [indices_to_words(indices, vocabulary) for indices in student_sql.detach().cpu().numpy()]
 
     changes, base_distance = perturbation_analysis(correct_sql, student_sql, model,UNK_TOKEN)
     token_impact_dict = tokens_to_dataframe(student_sql_words[0],correct_sql_words[0], changes)
-
+    data = {'Tokens': student_sql_words[0], 'Impact': changes}
+    df = pd.DataFrame(data)
+    df['Impact'] = df['Impact']  *base_distance.item()
+    # Create the seaborn bar plot
+    plt.figure(figsize=(12, 8))  # Adjust the figure size as needed
+    bar_plot = sns.barplot(x='Tokens', y='Impact', data=df, palette='Blues_d')
+    plt.xlabel('Tokens')
+    plt.ylabel('Impact on Distance')
+    plt.title('{}'.format(base_distance.item()))
+    plt.xticks(rotation=90)  # Rotate x-axis labels for better visibility if needed
+    plt.tight_layout()  # Adjust layout to make room for label rotation
+    plt.savefig("plots/F4_example_of_ablation_results.pdf")
     student_tokens_to_report = visualize_token_impact(student_sql_words[0], correct_sql_words[0], changes,
                            title="Impact of Changes on Student SQL True points {} - Predicted {}".format(percent.item(),
                                                                                                          base_distance.item().__round__(3)),
@@ -149,8 +164,6 @@ for i, batch_data in tqdm(enumerate(loader)):
         'student_tokens_to_report': student_tokens_to_report,  # Tokens from student solution to report
     }
     results.append(result)
-    if i == 100:
-        break
 
 # Convert the list of results into a DataFrame
 results_df = pd.DataFrame(results)

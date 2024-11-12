@@ -31,24 +31,27 @@ def tokens_to_dataframe(tokens_student, tokens_correct, impacts):
     }
     return pd.DataFrame(data)
 
-def visualize_attribution(res):
+def visualize_attribution(res, distance):
     colors = ['red' if attr > 0 else 'green' for attr in res['att']]
     plt.figure(figsize=(12, 6))
     bars = plt.bar(range(len(res['token'])), res['att'], tick_label=res['token'], color=colors)
     plt.xlabel('Tokens')
     plt.ylabel('Attribution')
     plt.xticks(rotation=90)
-    plt.tight_layout()
     for bar, attr in zip(bars, res['att']):
         plt.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), f'{attr:.2f}',
                  ha='center', va='bottom' if attr > 0 else 'top', color='black')
 
-    #plt.show()
+    plt.title("{}".format(distance))
+    plt.tight_layout()
+    plt.savefig("plots/att_example.pdf")
+    plt.show()
 vocabulary = pickle.load(open("data/vocab.pkl", "rb"))
 vocab_size = len(vocabulary)+1
 UNK_TOKEN = vocabulary['<UNK>']
 print(vocab_size)
 data = pd.read_pickle("data/processed_data.pkl")
+data = data[(data['percentWrong'] >= 0.4) & (data['percentWrong'] <= 0.6)]
 dataset = QuestionDataset(data, column_names=['studentsolution_padded', 'correctsolution_padded', 'percentWrong'],device=device, vocab_size=vocab_size)
 loader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True)
 model = torch.load("model_full.pth")
@@ -88,7 +91,10 @@ for i, batch_data in tqdm(enumerate(loader), total=len(dataset)):
     res_sorted = res.sort_values(by='att', ascending=False)
     top_5 = res_sorted.head(5)[['token', 'att']].values.tolist()
     bottom_5 = res_sorted.tail(5)[['token', 'att']].values.tolist()
-    #visualize_attribution(res)
+    visualize_attribution(res, distance.item())
+    print()
+    print(" ".join(correct_sql_words[0]))
+    print(" ".join(student_sql_words[0]))
     result = {
         'student_full_solution': ' '.join([token for token in student_sql_words[0] if token != '<PAD>']),  # Full student SQL solution as a string
         'correct_full_solution': ' '.join([token for token in correct_sql_words[0] if token != '<PAD>']),  # Full correct SQL solution as a string

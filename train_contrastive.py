@@ -21,13 +21,7 @@ def make_umap(ep,correct_L, student_L, batch_data, percent):
     mini_batch_size = np.shape(batch_data['correct_sql'])[0]
     correct_2d = latent_2d[:mini_batch_size]
     student_2d = latent_2d[mini_batch_size:]
-    df = pd.DataFrame({
-        'UMAP1': latent_2d[:, 0],  # First UMAP component
-        'UMAP2': latent_2d[:, 1],  # Second UMAP component
-        'label': ['correct'] * mini_batch_size + ['student'] * mini_batch_size,  # Label for correct/student
-        'percentWrong': list(percent.detach().cpu().numpy()) + list(percent.detach().cpu().numpy())
-        # Percent repeated for correct/student
-    })
+
     plt.figure(figsize=(10, 6))
     sns.scatterplot(x=correct_2d[:, 0], y=correct_2d[:, 1], color='blue', label='Correct SQL', marker='o')
     sns.scatterplot(x=student_2d[:, 0], y=student_2d[:, 1], color='red', label='Student SQL', marker='x')
@@ -118,13 +112,14 @@ dataset = QuestionDataset(data, column_names=['studentsolution_padded', 'correct
 '''
     Hyperparams
 '''
-batch_size = 600
-learning_rate = 0.004734096563558571
-num_epochs = 500
-embedding_dim = 200
-hidden_dim = 176
-temperature = 0.14295679230062186
-augment_percent = 20
+batch_size = 512
+learning_rate = 0.0004734638139575756
+num_epochs = 50
+embedding_dim = 93
+hidden_dim = 30
+temperature = 0.4
+augment_percent = 30
+lstm_hidden = 1
 '''
     Spliting the data
 '''
@@ -136,7 +131,7 @@ sql_test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_siz
 '''
     Init everything
 '''
-model = SQLComparisonModel(vocab_size=vocab_size, embedding_dim=embedding_dim, hidden_dim=hidden_dim).to(device)
+model = SQLComparisonModel(vocab_size=vocab_size, embedding_dim=embedding_dim, hidden_dim=hidden_dim, lstm_hidden=lstm_hidden).to(device)
 optim = torch.optim.Adam(model.parameters(), lr=learning_rate)
 # You would continue with your training loop here
 model.train()
